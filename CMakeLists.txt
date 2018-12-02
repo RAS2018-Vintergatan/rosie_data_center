@@ -41,11 +41,11 @@ include_directories(
 
 add_executable(rosie_testing src/rosie_brain_testing.cpp)
 add_executable(rosie_fetching src/rosie_brain_fetching.cpp)
-#add_executable(rosie_exploring src/rosie_brain_exploring.cpp)
+add_executable(rosie_exploring src/rosie_brain_exploring.cpp)
 target_link_libraries(rosie_fetching ${catkin_LIBRARIES})
 target_link_libraries(rosie_testing ${catkin_LIBRARIES})
-#target_link_libraries(rosie_exploring ${catkin_LIBRARIES})
+target_link_libraries(rosie_exploring ${catkin_LIBRARIES})
 add_dependencies(rosie_fetching ${catkin_EXPORTED_TARGETS})
 add_dependencies(rosie_testing ${catkin_EXPORTED_TARGETS})
-#add_dependencies(rosie_exploring ${catkin_EXPORTED_TARGETS})
+add_dependencies(rosie_exploring ${catkin_EXPORTED_TARGETS})
 #std_msgs nav_msgs phidgets geometry_msgs sensor_msgs tf pcl_ros visualization_msgs
