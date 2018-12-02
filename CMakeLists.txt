@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 2.8.3)
 project(rosie_data_center)
 
 find_package(catkin REQUIRED COMPONENTS
-	 message_generation
+#	 message_generation
 	 roscpp
 	 std_msgs
 	 phidgets
@@ -15,13 +15,13 @@ find_package(catkin REQUIRED COMPONENTS
 	)
 
 
-add_message_files(
-  FILES
-)
+#add_message_files(
+#  FILES
+#)
 
-add_service_files(
-  FILES
-)
+#add_service_files(
+#  FILES
+#)
 
 generate_messages(
   DEPENDENCIES
@@ -30,10 +30,10 @@ generate_messages(
 
 catkin_package(
   DEPENDS
-  CATKIN_DEPENDS roscpp std_msgs phidgets geometry_msgs sensor_msgs nav_msgs tf  pcl_ros visualization_msgs message_runtime
+  CATKIN_DEPENDS roscpp std_msgs phidgets geometry_msgs sensor_msgs nav_msgs tf  pcl_ros visualization_msgs 
   LIBRARIES
 )
-
+#message_runtime
 include_directories(
   include
   ${catkin_INCLUDE_DIRS}
