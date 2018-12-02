@@ -1,0 +1,6 @@
+<launch>
+	
+	<!-- run the path finder -->
+	<node pkg="rosie_path_finder" type="rosie_brain_fetching" name="fetching"/>
+
+</launch>

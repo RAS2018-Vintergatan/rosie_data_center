@@ -1,9 +1,0 @@
-<launch>
-	
-	<!-- run the path finder -->
-	<node pkg="rosie_path_finder" type="rosie_rrt" name="rrt"/>
-
-	<!-- run the path finder -->
-	<node pkg="rosie_path_finder" type="rosie_rrt_service" name="rrt_service"/>
-	
-</launch>
