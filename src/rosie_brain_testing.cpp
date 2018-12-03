@@ -72,6 +72,8 @@ boost::shared_ptr<geometry_msgs::PoseStamped> lastTargetPose_ptr;
 
 ros::Subscriber evidence_sub;
 ros::Publisher objStack_pub;
+ros::Publisher speak_pub;
+
 ros::ServiceClient storeObjClient;
 ros::ServiceClient loadClient;
 ros::ServiceClient gateClient;
@@ -99,6 +101,9 @@ float objTemp1[4];
 float objTemp2[4];
 bool objInitialized = 0;
 float PI = 3.1415926f;
+
+// Espeak
+std_msgs::String say_this;
 
 
 bool checkedStoredObjects = 0;
@@ -212,14 +217,21 @@ void evidenceCallback(const rosie_object_detector::RAS_Evidence evidence){
 				object.value = obj_val; //weighting
 				object.name = obj_string_id;
 				objStack.Objects.push_back(object);
+				say_this.data = object.name;
+				speak_pub.publish(say_this);
 			}else{
 				if(pow(posX-objStack.Objects[listedIndex].x,2)+pow(posY-objStack.Objects[listedIndex].y,2) > (accuracy*accuracy)){
 					objStack.Objects[listedIndex].x = posX;
 					objStack.Objects[listedIndex].y = posY;
 					//evtl remove obj and push again -> generate new walls/lines
 					ROS_INFO("This object has been moved.");
+
+					say_this.data = "' This object has been moved. '";
+					speak_pub.publish(say_this);
 				}else{
 					ROS_INFO("This object is already mapped.");
+					say_this.data = "' This object is already mapped. '";
+					speak_pub.publish(say_this);
 				}
 			}
 
@@ -247,7 +259,8 @@ void evidenceCallback(const rosie_object_detector::RAS_Evidence evidence){
 			}
 			if(!pushed){
 				ROS_INFO("NEW battery");
-
+				say_this.data = "' New Battery '";
+				speak_pub.publish(say_this);
 				rosie_map_controller::BatteryPosition battery;
 				battery.x = posX;
 				battery.y = posY;
@@ -306,8 +319,12 @@ void actuateGripper(bool command){
 	if(gateSrv.response.result == 1){
 		if(command == 0){
 			ROS_INFO("Gripper closed");
+			say_this.data = "' Close Gripper '";
+			speak_pub.publish(say_this);
 		} else if(command == 1){
 			ROS_INFO("Gripper opened");
+			say_this.data = "' Open Gripper '";
+			speak_pub.publish(say_this);
 		}
 	}else{
 		//ROS_INFO("Gripper don't react. Please have a look.");
@@ -324,6 +341,7 @@ int main(int argc, char **argv){
 		//target_tfl_ptr.reset(new tf::TransformListener);
 
     ros::NodeHandle n;
+		speak_pub = n.advertise<std_msgs::String>("/espeak/string",1);
 	  evidence_sub = n.subscribe<rosie_object_detector::RAS_Evidence>("/evidence",10, evidenceCallback);
 		//ros::Subscriber rviz_goal = n.subscribe<geometry_msgs::PoseStamped>("/rviz_object_pose",10,rvizTargetPoseCallback);
 		ros::Subscriber rviz_goal = n.subscribe("/rviz_object_pose",10, rvizTargetPoseCallback);

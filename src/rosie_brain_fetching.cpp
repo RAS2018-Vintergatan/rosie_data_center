@@ -224,8 +224,12 @@ void evidenceCallback(const rosie_object_detector::RAS_Evidence evidence){
 					objStack.Objects[listedIndex].y = posY;
 					//evtl remove obj and push again -> generate new walls/lines
 					ROS_INFO("This object has been moved.");
+					say_this.data = "' This object has been moved. '";
+					speak_pub.publish(say_this);
 				}else{
 					ROS_INFO("This object is already mapped.");
+					say_this.data = "' This object is already mapped. '";
+					speak_pub.publish(say_this);
 				}
 			}
 
@@ -253,6 +257,8 @@ void evidenceCallback(const rosie_object_detector::RAS_Evidence evidence){
 			}
 			if(!pushed){
 				ROS_INFO("NEW battery");
+				say_this.data = "' New Battery '";
+				speak_pub.publish(say_this);
 
 				rosie_map_controller::BatteryPosition battery;
 				battery.x = posX;
@@ -298,8 +304,12 @@ void actuateGripper(bool command){
 	if(gateSrv.response.result == 1){
 		if(command == 0){
 			ROS_INFO("Gripper closed");
+			say_this.data = "' Close Gripper '";
+			speak_pub.publish(say_this);
 		} else if(command == 1){
 			ROS_INFO("Gripper opened");
+			say_this.data = "' Open Gripper '";
+			speak_pub.publish(say_this);
 		}
 	}else{
 		ROS_INFO("Gripper don't react. Please have a look.");
