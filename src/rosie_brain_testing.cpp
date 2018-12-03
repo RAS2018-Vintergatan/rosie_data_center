@@ -66,6 +66,10 @@ int blue_triangle_val = 0;
 int purple_cross_val = 0;
 int purple_star_val = 0;
 
+// Target pose
+boost::shared_ptr<geometry_msgs::PoseStamped> targetPose_ptr;
+boost::shared_ptr<geometry_msgs::PoseStamped> lastTargetPose_ptr;
+
 ros::Subscriber evidence_sub;
 ros::Publisher objStack_pub;
 ros::ServiceClient storeObjClient;
@@ -100,7 +104,7 @@ float PI = 3.1415926f;
 bool checkedStoredObjects = 0;
 rosie_map_controller::ObjectStoring objStack;
 //std::vector<rosie_map_controller::BatteryPosition> batStack;
-ros::Time lastObjStoring = ros::Time::now();
+ros::Time lastObjStoring; 
 std::vector<ros::Time> lastBatObservation;
 void evidenceCallback(const rosie_object_detector::RAS_Evidence evidence){
 	if(!checkedStoredObjects){
@@ -272,13 +276,19 @@ bool gotNewTarget = 0;
 float tarPoseX=0;
 float tarPoseY=0;
 //geometry_msgs::PoseStamped rviz_pose;
-void rvizTargetPoseCallback(geometry_msgs::PoseStamped msg){
-	if((tarPoseX != msg.pose.position.x) || (tarPoseY != msg.pose.position.y)){
-		tarPoseX = msg.pose.position.x;
-		tarPoseY = msg.pose.position.y;
-		ROS_INFO("target x: %f y: %f", tarPoseX, tarPoseY);
-		gotNewTarget = 1;
-	}
+void rvizTargetPoseCallback(const geometry_msgs::PoseStamped& pose){
+	targetPose_ptr->pose.position.x = pose.pose.position.x;
+	targetPose_ptr->pose.position.y = pose.pose.position.y;
+	targetPose_ptr->header.seq = pose.header.seq;
+	targetPose_ptr->header.frame_id = pose.header.frame_id;
+	targetPose_ptr->header.stamp = pose.header.stamp;
+
+	//if((tarPoseX != msg.pose.position.x) || (tarPoseY != msg.pose.position.y)){
+	//	tarPoseX = msg.pose.position.x;
+	//	tarPoseY = msg.pose.position.y;
+		ROS_ERROR("target x: %f y: %f", targetPose_ptr->pose.position.x, targetPose_ptr->pose.position.y);
+	//	gotNewTarget = 1;
+	//}
 }
 
 nav_msgs::Odometry pose;
@@ -300,7 +310,7 @@ void actuateGripper(bool command){
 			ROS_INFO("Gripper opened");
 		}
 	}else{
-		ROS_INFO("Gripper don't react. Please have a look.");
+		//ROS_INFO("Gripper don't react. Please have a look.");
 	}
 }
 
@@ -315,7 +325,8 @@ int main(int argc, char **argv){
 
     ros::NodeHandle n;
 	  evidence_sub = n.subscribe<rosie_object_detector::RAS_Evidence>("/evidence",10, evidenceCallback);
-		ros::Subscriber rviz_goal = n.subscribe<geometry_msgs::PoseStamped>("/rviz_object_pose",10,rvizTargetPoseCallback);
+		//ros::Subscriber rviz_goal = n.subscribe<geometry_msgs::PoseStamped>("/rviz_object_pose",10,rvizTargetPoseCallback);
+		ros::Subscriber rviz_goal = n.subscribe("/rviz_object_pose",10, rvizTargetPoseCallback);
 		storeObjClient = n.serviceClient<rosie_map_controller::RequestObjStoring>("request_store_objects");
 		loadClient = n.serviceClient<rosie_map_controller::RequestLoading>("request_load_mapping");
 		gateClient = n.serviceClient<rosie_servo_controller::ControlGates>("control_gates");
@@ -323,7 +334,7 @@ int main(int argc, char **argv){
 		rrtClient = n.serviceClient<rosie_path_finder::rrtService>("/rrt");
 		objStack_pub = n.advertise<rosie_map_controller::ObjectStoring>("/object_stack",10);
 		//rosie_map_controller::StartRRT startSrv;
-
+    lastObjStoring = ros::Time::now();
     n.getParam("red_cylinder", red_cylinder_val);
     n.getParam("red_cube", red_cube_val);
     n.getParam("red_hollow_cube", red_hollow_cube_val);
@@ -340,7 +351,8 @@ int main(int argc, char **argv){
     n.getParam("purple_cross", purple_cross_val);
     n.getParam("purple_star", purple_star_val);
 
-
+	targetPose_ptr.reset(new geometry_msgs::PoseStamped);
+	lastTargetPose_ptr.reset(new geometry_msgs::PoseStamped);
 
 		static tf::TransformBroadcaster br;
 
@@ -352,28 +364,39 @@ int main(int argc, char **argv){
 //***********************************
 //STATE-MACHINE
 //***********************************
-			if(checkedStoredObjects){
-				collisionSrv.request.question = 1;
-				if(collisionClient.call(collisionSrv)){
-					if(collisionSrv.response.answer){
-						collisionDetected = 1;
-					}
-				}
-
-				if(gotNewTarget || collisionDetected){
-					rrtSrv.request.goalx = tarPoseX;
-					rrtSrv.request.goaly = tarPoseY;
-					rrtSrv.request.mode = 0; //go to target
-					gotNewTarget = 0;
-				}
-
-				if(0.05*0.05 < (pow(pose.pose.pose.position.x-tarPoseX,2)+pow(pose.pose.pose.position.y-tarPoseY,2)) < 0.2*0.2){
-					actuateGripper(1); //open
-				}else if (0 < (pow(pose.pose.pose.position.x-tarPoseX,2)+pow(pose.pose.pose.position.y-tarPoseX,2)) < 0.05*0.05){
-					actuateGripper(0); //close
+		if(checkedStoredObjects){
+			collisionSrv.request.question = 1;
+			if(collisionClient.call(collisionSrv)){
+				if(collisionSrv.response.answer){
+					collisionDetected = 1;
 				}
 			}
-			ros::spinOnce();
-			loop_rate.sleep();
 		}
+		if((targetPose_ptr->header.seq != lastTargetPose_ptr->header.seq) || collisionDetected){
+			lastTargetPose_ptr->pose.position.x = targetPose_ptr->pose.position.x;
+			lastTargetPose_ptr->pose.position.y = targetPose_ptr->pose.position.y;
+			lastTargetPose_ptr->header.seq = targetPose_ptr->header.seq;
+			lastTargetPose_ptr->header.frame_id = targetPose_ptr->header.frame_id;
+			lastTargetPose_ptr->header.stamp = targetPose_ptr->header.stamp;
+			
+			rrtSrv.request.goalx = lastTargetPose_ptr->pose.position.x;
+			rrtSrv.request.goaly = lastTargetPose_ptr->pose.position.y;
+			rrtSrv.request.mode = 0; //go to target
+			if(rrtClient.call(rrtSrv)){
+				ROS_ERROR("published");
+			}else{
+				ROS_ERROR("problems publishing");
+			}
+
+		}
+
+		if(0.05*0.05 < (pow(pose.pose.pose.position.x-lastTargetPose_ptr->pose.position.x,2)+pow(pose.pose.pose.position.y-lastTargetPose_ptr->pose.position.y,2)) < 0.2*0.2){
+			actuateGripper(1); //open
+		}else if (0 < (pow(pose.pose.pose.position.x-lastTargetPose_ptr->pose.position.x,2)+pow(pose.pose.pose.position.y-lastTargetPose_ptr->pose.position.y,2)) < 0.05*0.05){
+			actuateGripper(0); //close
+		}
+		
+		ros::spinOnce();
+		loop_rate.sleep();
 	}
+}
