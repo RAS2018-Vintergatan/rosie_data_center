@@ -67,7 +67,10 @@ int blue_triangle_val = 0;
 int purple_cross_val = 0;
 int purple_star_val = 0;
 
-/ Target pose
+std_msgs::String say_this;
+ros::Publisher speak_pub;
+
+// Target pose
 boost::shared_ptr<geometry_msgs::PoseStamped> targetPose_ptr;
 boost::shared_ptr<geometry_msgs::PoseStamped> lastTargetPose_ptr;
 
@@ -93,6 +96,8 @@ std::vector<float> objPoseX;
 std::vector<float> objPoseY;
 int batNumber = 4;
 float batSize = 0.1;
+float batSizeStanding = 0.1;
+float batSizeLaying = 0.15;
 std::vector<float> batPoseX;
 std::vector<float> batPoseY;
 
@@ -296,7 +301,7 @@ void deleteLastObject(int idxToDelete){
 	ROS_INFO("%d", idxToDelete);
 	objStack.Objects.erase(objStack.Objects.begin() +idxToDelete);
 }
-)
+
 void actuateGripper(bool command){
 	gateSrv.request.control = command;
 	gateClient.call(gateSrv);
@@ -322,6 +327,7 @@ int main(int argc, char **argv){
 		//target_tfl_ptr.reset(new tf::TransformListener);
 
     ros::NodeHandle n;
+	speak_pub = n.advertise<std_msgs::String>("/espeak/string",1);
 	  evidence_sub = n.subscribe<rosie_object_detector::RAS_Evidence>("/evidence",10, evidenceCallback);
 		//ros::Subscriber rviz_goal = n.subscribe<geometry_msgs::PoseStamped>("/rviz_object_pose",10,rvizTargetPoseCallback);
 		storeObjClient = n.serviceClient<rosie_map_controller::RequestObjStoring>("request_store_objects");
