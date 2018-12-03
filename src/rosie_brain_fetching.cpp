@@ -24,6 +24,7 @@
 #include <rosie_path_finder/RequestRerun.h>
 #include <rosie_path_finder/rrtService.h>
 #include <rosie_map_controller/MapStoring.h>
+#include <rosie_map_controller/ObjectStoring.h>
 #include <rosie_map_controller/BatteryPosition.h>
 #include <rosie_map_controller/ObjectPosition.h>
 
@@ -66,7 +67,12 @@ int blue_triangle_val = 0;
 int purple_cross_val = 0;
 int purple_star_val = 0;
 
+/ Target pose
+boost::shared_ptr<geometry_msgs::PoseStamped> targetPose_ptr;
+boost::shared_ptr<geometry_msgs::PoseStamped> lastTargetPose_ptr;
+
 ros::Subscriber evidence_sub;
+ros::Publisher objStack_pub;
 ros::ServiceClient storeObjClient;
 ros::ServiceClient loadClient;
 ros::ServiceClient gateClient;
@@ -268,6 +274,7 @@ void evidenceCallback(const rosie_object_detector::RAS_Evidence evidence){
 				lastObjStoring = ros::Time::now();
 			}
 		}
+		objStack_pub.publish(objStack);
 	}
 }
 
@@ -281,9 +288,9 @@ void currentPoseCallback(nav_msgs::Odometry msg){ // for re-calculation of the p
 
 void deleteLastObject(int idxToDelete){
 	ROS_INFO("%d", idxToDelete);
-	objStack.Objects;
+	objStack.Objects.erase(objStack.Objects.begin() +idxToDelete);
 }
-
+)
 void actuateGripper(bool command){
 	gateSrv.request.control = command;
 	gateClient.call(gateSrv);
@@ -312,6 +319,9 @@ int main(int argc, char **argv){
 		gateClient = n.serviceClient<rosie_servo_controller::ControlGates>("control_gates");
 		collisionClient = n.serviceClient<rosie_path_finder::RequestRerun>("request_rerun");
 		rrtClient = n.serviceClient<rosie_path_finder::rrtService>("/rrt");
+		objStack_pub = n.advertise<rosie_map_controller::ObjectStoring>("/object_stack",10);
+
+		lastObjStoring = ros::Time::now();
 
 		//rosie_map_controller::StartRRT startSrv;
 

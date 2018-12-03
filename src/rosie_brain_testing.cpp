@@ -104,7 +104,7 @@ float PI = 3.1415926f;
 bool checkedStoredObjects = 0;
 rosie_map_controller::ObjectStoring objStack;
 //std::vector<rosie_map_controller::BatteryPosition> batStack;
-ros::Time lastObjStoring; 
+ros::Time lastObjStoring;
 std::vector<ros::Time> lastBatObservation;
 void evidenceCallback(const rosie_object_detector::RAS_Evidence evidence){
 	if(!checkedStoredObjects){
@@ -378,7 +378,7 @@ int main(int argc, char **argv){
 			lastTargetPose_ptr->header.seq = targetPose_ptr->header.seq;
 			lastTargetPose_ptr->header.frame_id = targetPose_ptr->header.frame_id;
 			lastTargetPose_ptr->header.stamp = targetPose_ptr->header.stamp;
-			
+
 			rrtSrv.request.goalx = lastTargetPose_ptr->pose.position.x;
 			rrtSrv.request.goaly = lastTargetPose_ptr->pose.position.y;
 			rrtSrv.request.mode = 0; //go to target
@@ -395,7 +395,7 @@ int main(int argc, char **argv){
 		}else if (0 < (pow(pose.pose.pose.position.x-lastTargetPose_ptr->pose.position.x,2)+pow(pose.pose.pose.position.y-lastTargetPose_ptr->pose.position.y,2)) < 0.05*0.05){
 			actuateGripper(0); //close
 		}
-		
+
 		ros::spinOnce();
 		loop_rate.sleep();
 	}

@@ -283,20 +283,20 @@ void findTree(){
 				if(occGrid.data[(j)*width+i-1] == 125){
 					edge[2] = j;
 					edge[3] = i-1;
-					cnt_edges++;	
+					cnt_edges++;
 					if(nextIdxVertexList(edge)<0){ //not in list --> 1, append
 						cnt_edges++;
 						edges.push_back(edge);
-					}			
+					}
 				}
 				if(occGrid.data[(j)*width+i+1] == 125){
 					edge[2] = j;
 					edge[3] = i+1;
-					cnt_edges++;	
+					cnt_edges++;
 					if(nextIdxVertexList(edge)<0){ //not in list --> 1, append
 						cnt_edges++;
 						edges.push_back(edge);
-					}			
+					}
 				}
 				if(cnt_edges == 0){
 					sp[0] = j;
@@ -333,7 +333,7 @@ void findTree(){
 			point[1] = edges[nextIdx][1];
 			edges[nextIdx][0]= -1;
 			edges[nextIdx][0]= -1;
-			stab.push_back(point);	
+			stab.push_back(point);
 		}
 		if(nextIdx>= 0){
 			allstab.push_back(stab);
@@ -354,7 +354,7 @@ void findTree(){
 			point[1] = edges[nextIdx][1];
 			edges[nextIdx][0]= -1;
 			edges[nextIdx][0]= -1;
-			stab.push_back(point);	
+			stab.push_back(point);
 		}
 		if(nextIdx>= 0){
 			endstab.push_back(stab);
@@ -391,8 +391,8 @@ void findTree(){
 	std::vector<int> sendold(2,0);
 	std::vector<int> idxToDelete;
 	for(int i = 0; i<combistab.size(); i++){
-		sendold[0] = combistab[i][combistab[i].size()-1][0]; 
-		sendold[1] = combistab[i][combistab[i].size()-1][1]; 
+		sendold[0] = combistab[i][combistab[i].size()-1][0];
+		sendold[1] = combistab[i][combistab[i].size()-1][1];
 		while(sendold[0] != 1 and sendold[1] != 1){
 			std::vector<int> idxlist;
 			std::vector<int>::iterator it;
@@ -401,7 +401,7 @@ void findTree(){
 				it = std::find(idxlist.begin(), idxlist.end(), (int) j);
 				if(it == idxlist.end() && j!=0){
 					continue;
-				}				
+				}
 				int be = -1;
 				sbegin[0] = allstab[j][0][0];
 				sbegin[1] = allstab[j][0][1];
@@ -414,9 +414,9 @@ void findTree(){
 					combistab[i].insert(combistab[i].begin(), allstab[j].begin(), allstab[j].end());
 				}
 				idxlist.push_back((int) j);
-			}		
-			sendold[0] = combistab[i][combistab[i].size()-1][0]; 
-			sendold[1] = combistab[i][combistab[i].size()-1][1]; 
+			}
+			sendold[0] = combistab[i][combistab[i].size()-1][0];
+			sendold[1] = combistab[i][combistab[i].size()-1][1];
 		}
 	}
 
@@ -741,6 +741,7 @@ int main(int argc, char **argv){
 		if(mapInitialized){
 			if(!pathInitialized){
 				findTree();
+				pathInitialized;
 			}else{
 
 				collisionSrv.request.question = 1;
@@ -749,7 +750,7 @@ int main(int argc, char **argv){
 						collisionDetected = 1;
 					}
 				}
-	
+
 				if(collisionDetected || !pathSend){
 					rrtSrv.request.goalx = cleanpath_f[poscnt][0];
 					rrtSrv.request.goaly = cleanpath_f[poscnt][1];
@@ -760,7 +761,7 @@ int main(int argc, char **argv){
 					}
 					pathSend = 1;
 				}
-				
+
 				if((pow(pose.pose.pose.position.x-cleanpath[poscnt][0],2)+pow(pose.pose.pose.position.y-cleanpath[poscnt][1],2)) < 0.2*0.2){
 					poscnt++;
 					pathSend = 0;
@@ -771,4 +772,3 @@ int main(int argc, char **argv){
 		loop_rate.sleep();
 	}
 }
-
