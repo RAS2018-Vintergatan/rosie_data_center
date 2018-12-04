@@ -676,21 +676,24 @@ int main(int argc, char **argv){
 //***********************************
 //STATE-MACHINE
 //***********************************
+		//ROS_ERROR("collisionDetected %d, poscnt %d, pathInitialized: %d, pathSend: %d", collisionDetected, poscnt, pathInitialized, pathSend);
 		if(mapInitialized){
 			if(!pathInitialized){
 				ROS_ERROR("Find Tree");
 				findPath();
 				pathInitialized = 1;
 			}else{
+				//ROS_ERROR("-- finalpath element %f %f", finalpath[poscnt][0], finalpath[poscnt][1]);
 
 				collisionSrv.request.question = 1;
 				if(collisionClient.call(collisionSrv)){
 					if(collisionSrv.response.answer){
-						collisionDetected = 1;
+						//collisionDetected = 1;
 					}
 				}
 
 				if((collisionDetected || !pathSend) && poscnt < finalpath.size()){
+					collisionDetected = 0;
 					rrtSrv.request.goalx = finalpath[poscnt][0];
 					rrtSrv.request.goaly = finalpath[poscnt][1];
 					rrtSrv.request.mode = 0; //go to target
@@ -702,7 +705,7 @@ int main(int argc, char **argv){
 					pathSend = 1;
 				}
 
-				if((pow(pose.pose.pose.position.x-finalpath[poscnt][0],2)+pow(pose.pose.pose.position.y-finalpath[poscnt][1],2)) < 0.2*0.2){
+				if((pow(pose.pose.pose.position.x-finalpath[poscnt][0],2)+pow(pose.pose.pose.position.y-finalpath[poscnt][1],2)) < 0.2*0.2 && poscnt < finalpath.size()-1){
 					poscnt++;
 					pathSend = 0;
 				}

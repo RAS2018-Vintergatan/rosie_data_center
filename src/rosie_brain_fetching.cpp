@@ -387,7 +387,7 @@ int main(int argc, char **argv){
 				collisionSrv.request.question = 1;
 				if(collisionClient.call(collisionSrv)){
 					if(collisionSrv.response.answer){
-						collisionDetected = 1;
+						//collisionDetected = 1;
 						mode = lastMode; // the automatik procedure starts again, but leaves the wait state and goes back to the last action that is not yet completed
 					}
 				}
