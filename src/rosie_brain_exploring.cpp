@@ -9,6 +9,7 @@
 #include <nav_msgs/Odometry.h>
 #include <tf/transform_broadcaster.h>
 #include <geometry_msgs/Point.h>
+#include <visualization_msgs/MarkerArray.h>
 #include <string>
 #include <sstream>
 #include <math.h>
@@ -79,7 +80,7 @@ int purple_cross_val = 0;
 int purple_star_val = 0;
 
 float pi = 3.14159265359;
-float resolution = 0.4;
+float resolution = 0.2;
 int width = 1;
 int height = 1;
 int numbMarkers = 0;
@@ -87,13 +88,16 @@ int numbMarkers = 0;
 float robotsize = 0.2;
 nav_msgs::OccupancyGrid occGrid;
 
+std::vector<float> home(2,0);
+
+
 float* pointArray;
 
-static ros::Subscriber map_sub;
+ros::Subscriber map_sub;
 
 char mapInitialized = 0;
 char mapInitializing = 0;
-void initializeMap(const visualization_msgs::MarkerArray msg){
+void initializeMap(visualization_msgs::MarkerArray msg){
 	if(mapInitializing){
 		return;
 	}
@@ -157,23 +161,25 @@ void initializeMap(const visualization_msgs::MarkerArray msg){
 		ROS_INFO("sX: %f, sY: %f, eX: %f, eY: %f", sX, sY, eX, eY);
 	}
 
-	float offsetX = minX;
-	float offsetY = minY;
+	float offsetX = minX-resolution/2;
+	float offsetY = minY-resolution/2;
 
 	width = (int) (maxX - minX)/resolution;
 	height = (int) (maxY - minY)/resolution;
+	float movex = fmod((maxX-minX),resolution)/2;
+	float movey = fmod((maxY-minY),resolution)/2;
 
 	ROS_INFO("minX: %f, minY: %f, maxX: %f, maxY: %f, offsetX: %f, offsetY: %f", minX, minY, maxX, maxY, offsetX, offsetY);
-	ROS_INFO("width: %d, height: %d", width, height);
+	ROS_ERROR("width: %d, height: %d", width, height);
 
 	for(int o = 0; o < width*height; ++o){
 		occGrid.data.push_back(0);
 	}
 	for(int k = 0; k < numbMarkers; ++k){
-		float x1 = (pointArray[k<<2]) - offsetX;
-		float y1 = (pointArray[(k<<2)+1]) - offsetY;
-		float x2 = (pointArray[(k<<2)+2]) - offsetX;
-		float y2 = (pointArray[(k<<2)+3]) - offsetY;
+		float x1 = (pointArray[k<<2]) - movex;
+		float y1 = (pointArray[(k<<2)+1]) - movey;
+		float x2 = (pointArray[(k<<2)+2]) - movex;
+		float y2 = (pointArray[(k<<2)+3]) - movey;
 
 		float diffX = (x2-x1);
 		float diffY = (y2-y1);
@@ -201,282 +207,190 @@ void initializeMap(const visualization_msgs::MarkerArray msg){
 		}
 	}
 	ROS_INFO("occGrid set!");
+	home[0] = 0.2;
+	home[1] = 0.4;
 	mapInitialized = 1;
+	//for(int i = 0; i<width*height; i++){
+		//ROS_ERROR("%d",occGrid.data[i]);
+	//}
 }
 
-
-std::vector<std::vector<int> > edges; //vertex
-bool notInVertexList(std::vector<int> e){
-	bool ne = 0;
-	for(int i = 0; i<edges.size(); i++){
-		if( (edges[i][0] == e[0] and edges[i][1] == e[1] and edges[i][2] == e[2] and edges[i][3] == e[3]) or (edges[i][0] == e[2] and edges[i][1] == e[3] and edges[i][2] == e[0] and edges[i][3] == e[1]) ){
-			ne = 1;
-			break;
+int mini(std::vector<float> dist){
+	int index = 0;
+	float min_dist = dist[0];
+	for(int i = 0; i<dist.size(); i++){
+		if( dist[i]<min_dist){
+			min_dist = dist[i];
+			index = i;
 		}
 	}
-	return ne;
+	return index;
 }
-int nextIdxVertexList(std::vector<int> e){
-	int idx = -1;
-	for(int i = 0; i<edges.size(); i++){
-		if( (edges[i][0] == e[0] and edges[i][1] == e[1]) or (edges[i][2] == e[0] and edges[i][3] == e[1]) ){
-			if(edges[i][0] != -1 and edges[i][1] != -1 and edges[i][2] != -1 and edges[i][3] != -1){
-				idx = i;
-				break;
-			}
+int mini2(std::vector<int> dist){
+	int index = 0;
+	int min_dist = dist[0];
+	for(int i = 0; i<dist.size(); i++){
+		if( dist[i]<min_dist){
+			min_dist = dist[i];
+			index = i;
 		}
 	}
-	return idx;
+	return index;
 }
 
-std::vector<std::vector<int> > nodepoint;
-bool isNodePoint(std::vector<int> n){
-	bool nn = 0;
-	for(int i = 0; i<nodepoint.size(); i++){
-		if( (nodepoint[i][0] == n[0] and nodepoint[i][1] == n[1] ) or (nodepoint[i][2] == n[0] and nodepoint[i][3] == n[1]) ){
-			nn = 1;
-			break;
-		}
-	}
-	return nn;
-}
-
-
-std::vector<int> edge(4,0);
-std::vector<int> ep(2,0);
-std::vector<std::vector<int> > endpoint;
-std::vector<int> sp(2,0);
-std::vector<std::vector<int> > solopoint;
-std::vector<int> np(2,0);
-std::vector<std::vector<std::vector<int> > > allstab;
-std::vector<std::vector<std::vector<int> > > endstab;
-std::vector<std::vector<std::vector<int> > > combistab;
-std::vector<std::vector<int> > cleanpath;
-std::vector<std::vector<int> > cleanpath_f;
-std::vector<std::vector<int> > stab;
-int cnt_edges;
-void findTree(){
-	edges.clear();
-	for(int i = 0; i<height; i++){ //y direction
-		for(int j = 0; j<width; j++){
-			edge[0] = j;
-			edge[1] = i;
-			cnt_edges = 0;
-			if((j) > 0 && (j) < width-1 && (i) > 0 && (1) < height-1){
-				if(occGrid.data[(j-1)*width+i] == 125){
-					edge[2] = j-1;
-					edge[3] = i;
-					if(nextIdxVertexList(edge)<0){ //not in list --> 1, append
-						cnt_edges++;
-						edges.push_back(edge);
-					}
-				}
-				if(occGrid.data[(j+1)*width+i] == 125){
-					edge[2] = j+1;
-					edge[3] = i;
-					cnt_edges++;
-					if(nextIdxVertexList(edge)<0){ //not in list --> 1, append
-						cnt_edges++;
-						edges.push_back(edge);
-					}
-				}
-				if(occGrid.data[(j)*width+i-1] == 125){
-					edge[2] = j;
-					edge[3] = i-1;
-					cnt_edges++;
-					if(nextIdxVertexList(edge)<0){ //not in list --> 1, append
-						cnt_edges++;
-						edges.push_back(edge);
-					}
-				}
-				if(occGrid.data[(j)*width+i+1] == 125){
-					edge[2] = j;
-					edge[3] = i+1;
-					cnt_edges++;
-					if(nextIdxVertexList(edge)<0){ //not in list --> 1, append
-						cnt_edges++;
-						edges.push_back(edge);
-					}
-				}
-				if(cnt_edges == 0){
-					sp[0] = j;
-					sp[1] = i;
-					solopoint.push_back(sp);
-				}
-				if(cnt_edges == 1){
-					ep[0] = j;
-					ep[1] = i;
-					endpoint.push_back(ep);
-				}
-				if(cnt_edges > 1){
-					np[0] = j;
-					np[1] = i;
-					nodepoint.push_back(np);
-				}
+std::vector<std::vector<float> > poses;
+std::vector<float> p(2,0);
+void findPath(){
+	poses.clear();
+	for(int y = 0; y<height; y++){
+		for(int x = 0; x<width; x++){
+			if(occGrid.data[y*width+x]==0){
+				p[0] = (x+1)*resolution;
+				p[1] = (y+1)*resolution;
+				poses.push_back(p);
+			}else{
+				p[0] = (x+1)*resolution;
+				p[1] = (y+1)*resolution;
+				//ROS_ERROR("%f %f", p[0], p[1]);
 			}
 		}
 	}
-	std::vector<int> point(2,0);
-	int nextIdx = -1;
-	for(int i = 0; i<endpoint.size(); i++){
-		stab.clear();
-		point[0] = endpoint[i][0];
-		point[1] = endpoint[i][1];
-		stab.push_back(point);
-		nextIdx = 0;
-		while(!isNodePoint(point) and i!=0){
-			nextIdx = nextIdxVertexList(point);
-			if(nextIdx<0){
-			break;
-			}
-			point[0] = edges[nextIdx][0];
-			point[1] = edges[nextIdx][1];
-			edges[nextIdx][0]= -1;
-			edges[nextIdx][0]= -1;
-			stab.push_back(point);
-		}
-		if(nextIdx>= 0){
-			allstab.push_back(stab);
-		}
-	}
-	for(int i = 0; i<nodepoint.size(); i++){
-		stab.clear();
-		point[0] = nodepoint[i][0];
-		point[1] = nodepoint[i][1];
-		stab.push_back(point);
-		nextIdx = 0;
-		while(!isNodePoint(point) and i!=0){
-			nextIdx = nextIdxVertexList(point);
-			if(nextIdx<0){
-			break;
-			}
-			point[0] = edges[nextIdx][0];
-			point[1] = edges[nextIdx][1];
-			edges[nextIdx][0]= -1;
-			edges[nextIdx][0]= -1;
-			stab.push_back(point);
-		}
-		if(nextIdx>= 0){
-			endstab.push_back(stab);
-		}
-	}
-	std::vector<int> sbegin(2,0);
-	std::vector<int> send(2,0);
-	std::vector<std::vector<int> > empty;
-	std::vector<int> emp(2,0);
-	empty.push_back(emp);
 
-	for(int i = 0; i<endpoint.size(); i++){
-		int idxStab = -1;
-		int be = -1;
-		for(int j = 0; j<allstab.size(); j++){
-			sbegin[0] = allstab[i][0][0];
-			sbegin[1] = allstab[i][0][1];
-			send[0] = allstab[i][allstab[i].size()-1][0];
-			send[0] = allstab[i][allstab[i].size()-1][0];
-			if(sbegin[0] == endpoint[i][0] and sbegin[1] == endpoint[i][1]){
-				idxStab = j;
-				std::reverse(allstab[i].begin(),allstab[i].end()); //turn around, because i use insert in later preocess
-				combistab.push_back(allstab[i]);
-				allstab[i].clear();
-				break;
-			}else if(send[0] == endpoint[i][0] and send[1] == endpoint[i][1]){
-				idxStab = j;
-				combistab.push_back(allstab[i]);
-				allstab[i].clear();
-				break;
-			}
+
+
+
+	int cellsInY = height;
+	//int cellsIntervalY = 1;
+	int cellsInX = width;
+	//int cellsIntervalX  = 1;
+
+	int hidden_nodes = cellsInY*cellsInX;
+	int max_epochs = 2000;
+	float eta = 0.2;
+	int neigh_size = cellsInY/2;
+
+	//initialize w 
+	std::vector<std::vector<float> > w;
+	std::vector<float> inner_w;
+	std::vector<float> dist;
+	for(int j = 0; j<hidden_nodes; j++){
+		inner_w.clear();
+		for(int i = 0; i<2; i++){
+			std::srand(unsigned ( std::time(0) ));
+			inner_w.push_back(((float)(std::rand()%100))/100.0*((float)cellsInX));
+			inner_w.push_back(((float)(std::rand()%100))/100.0*((float)cellsInY));
 		}
+		w.push_back(inner_w);
 	}
-	std::vector<int> sendold(2,0);
-	std::vector<int> idxToDelete;
-	for(int i = 0; i<combistab.size(); i++){
-		sendold[0] = combistab[i][combistab[i].size()-1][0];
-		sendold[1] = combistab[i][combistab[i].size()-1][1];
-		while(sendold[0] != 1 and sendold[1] != 1){
-			std::vector<int> idxlist;
-			std::vector<int>::iterator it;
-			for(int j = 0; j<allstab.size(); j++){
-				//it.clear();
-				it = std::find(idxlist.begin(), idxlist.end(), (int) j);
-				if(it == idxlist.end() && j!=0){
-					continue;
+
+	//SOM
+	ROS_ERROR("C1");
+	int index;
+	int bound1;
+	int bound2;
+	std::vector<int> indA;
+	std::vector<int> indB;
+	std::vector<int> uniqueV;
+	for(int i = 0; i<=max_epochs; i++){
+		neigh_size = floor(sqrt(max_epochs-i))+1 ;
+		for(int j =0; j<poses.size(); j++){
+			dist.clear();
+			for(int k = 0; k<w.size(); k++){
+				dist.push_back(std::sqrt(pow(w[k][0]-poses[j][0],2)+pow(w[k][1]-poses[j][1],2)));
+			}
+			index = mini(dist);
+			bound1 = (index - neigh_size/2);
+			bound2 = (index + neigh_size/2);
+			indA.clear();
+			indB.clear();
+			if(bound1 < 1){
+				bound1 = hidden_nodes + bound1-1;
+				for(int b1 =bound1; b1 < hidden_nodes; b1++){
+					indA.push_back(b1);
 				}
-				int be = -1;
-				sbegin[0] = allstab[j][0][0];
-				sbegin[1] = allstab[j][0][1];
-				send[0] = allstab[j][allstab[i].size()-1][0];
-				send[1] = allstab[j][allstab[i].size()-1][1];
-				if(sbegin[0] == sendold[0] and sbegin[1]== sendold[1]){
-					std::reverse(allstab[j].begin(), allstab[j].end());
-					combistab[i].insert(combistab[i].begin(), allstab[j].begin(), allstab[j].end());
-				}else if(send[0] == sendold[0] and send[1]== sendold[1]){
-					combistab[i].insert(combistab[i].begin(), allstab[j].begin(), allstab[j].end());
+			}else{
+				for(int b1 =bound1; b1 < index; b1++){
+					indA.push_back(b1);
 				}
-				idxlist.push_back((int) j);
 			}
-			sendold[0] = combistab[i][combistab[i].size()-1][0];
-			sendold[1] = combistab[i][combistab[i].size()-1][1];
-		}
-	}
-
-	std::vector<int> length;
-	for(int i = 0; i<combistab.size(); i++){
-		length.push_back((int) combistab[i].size());
-	}
-	std::vector<std::vector<int> > dirtypath;
-	std::vector<int>::iterator result;
-	while(length.size()>0){
-		result = std::max_element(length.begin(), length.end());
-		dirtypath.insert(dirtypath.begin(), combistab[result[0]].begin(), combistab[result[0]].end());
-		length.erase(length.begin() + result[0]);
-	}
-
-	int cnt = 0;
-	std::vector<std::vector<int> > temp;
-	for(int i =0; i<dirtypath.size(); i++){
-		cnt = 0;
-		sbegin[0] = dirtypath[i][0];
-		sbegin[1] = dirtypath[i][1];
-		for(int j =0; j<cleanpath.size(); j++){
-			if(cleanpath[j][0] == sbegin[0] and cleanpath[j][1] == sbegin[1]){
-				cnt++;
+			if(bound2 > hidden_nodes){
+				bound2 = bound2 - hidden_nodes;
+				for(int b2 = 0; b2 < bound2 ; b2++){
+					indB.push_back(b2);
+				}
+			}else{
+				for(int b2 = index; b2 < bound2; b2++){
+					indB.push_back(b2);
+				}
+			}
+			
+			uniqueV.clear();
+			uniqueV.insert(uniqueV.end(), indA.begin(), indA.end());
+			uniqueV.insert(uniqueV.end(), indB.begin(), indB.end());		
+			uniqueV.push_back(index);
+			std::sort(uniqueV.begin(), uniqueV.end());
+			std::vector<int>::iterator last = std::unique(uniqueV.begin(), uniqueV.end());
+			//ROS_ERROR("%d",last[0]);
+			uniqueV.erase(last, uniqueV.end());
+			for(int u = 0; u<uniqueV.size(); u++){
+				w[uniqueV[u]][0] = w[uniqueV[u]][0] + eta*(poses[j][0]-w[uniqueV[u]][0]);
+				w[uniqueV[u]][1] = w[uniqueV[u]][1] + eta*(poses[j][1]-w[uniqueV[u]][1]);
 			}
 		}
-		if(cnt == 0){
-			temp.clear();
-			temp.push_back(sbegin);
-			cleanpath.insert(cleanpath.begin(), temp.begin(), temp.end());
+	}
+ROS_ERROR("C2");
+	std::vector<float> finalX;
+	std::vector<float> finalY;
+	std::vector<std::vector<float> > finalpath;
+	std::vector<std::vector<float> > w_temp;
+	std::vector<int> indices;
+	int tempIdx;
+	w_temp.insert(w_temp.end(), w.begin(), w.end());
+	//ROS_ERROR("size %d",poses.size());
+	for(int i= 0; i<poses.size(); i++){
+		dist.clear();
+		for(int k = 0; k<w_temp.size(); k++){
+			dist.push_back(std::sqrt(std::pow(w_temp[k][0]-poses[i][0],2)+std::pow(w_temp[k][1]-poses[i][1],2)));
+			//ROS_ERROR("dist %f",dist[k]);
 		}
-	}
-	std::vector<float> sbegin_f(2,0);
-	//sbegin[0] = dirtypath[0][0];
-	//sbegin[1] = dirtypath[0][1];
-	for(int i = 0; i < solopoint.size(); i++){
-		temp.clear();
-		temp.push_back(solopoint[i]);
-		cleanpath.insert(cleanpath.begin(), temp.begin(), temp.end());
-	}
-	cleanpath_f.resize(cleanpath.size());
-	for(int i = 0; i < cleanpath.size(); i++){
-		cleanpath_f[i][0] = cleanpath[i][0]*resolution + 0.5*resolution;
-		cleanpath_f[i][1] = cleanpath[i][1]*resolution + 0.5*resolution ;
-	}
+		tempIdx = mini(dist);
+		indices.push_back(tempIdx);
+		finalpath.push_back(w_temp[tempIdx]);
+		ROS_ERROR("path %f %f",finalpath[i][0],finalpath[i][1]);
+		w_temp[tempIdx][0] += 1000.0;
+		w_temp[tempIdx][1] += 1000.0;
 
+	}
+	finalpath.push_back(home);
+	/*int idx;
+	finalpath.clear();
+	for(int i = 0; i<indices.size(); i++){
+		//ROS_ERROR("%d",indices[i]);
+		//finalX.push_back(poses[indices[i]][0]);
+		//finalY.push_back(poses[indices[i]][1]);
+		idx = indices[i];
+		finalpath.push_back(w_temp[idx]);
+		//ROS_ERROR("C3");
+		//indices[ind] = 1000;
+		ROS_ERROR("path %f %f",finalpath[i][0],finalpath[i][1]);
+	}*/
+	//finalX.push_back(finalX[0]);
+	//finalY.push_back(finalY[0]);
+	//ROS_ERROR("path %f %f",finalX[finalX.size()-1],finalY[finalY.size()-1]);
 }
 
 
 ros::Subscriber evidence_sub;
 ros::ServiceClient storeObjClient;
 ros::ServiceClient loadClient;
-ros::ServiceClient gateClient;
+//ros::ServiceClient gateClient;
 ros::ServiceClient collisionClient;
 ros::ServiceClient rrtClient;
 
 //rosie_map_controller::StartRRT startSrv;
 rosie_map_controller::RequestObjStoring objSrv;
 rosie_map_controller::RequestLoading loadSrv;
-rosie_servo_controller::ControlGates gateSrv;
+//rosie_servo_controller::ControlGates gateSrv;
 rosie_path_finder::RequestRerun collisionSrv;
 rosie_path_finder::rrtService rrtSrv;
 // Objects and Obstacles (Walls and Batteries)
@@ -499,10 +413,11 @@ float PI = 3.1415926f;
 bool checkedStoredObjects = 0;
 rosie_map_controller::ObjectStoring objStack;
 //std::vector<rosie_map_controller::BatteryPosition> batStack;
-ros::Time lastObjStoring = ros::Time::now();
+ros::Time lastObjStoring;
 std::vector<ros::Time> lastBatObservation;
 void evidenceCallback(const rosie_object_detector::RAS_Evidence evidence){
 	if(!checkedStoredObjects){
+		lastObjStoring = ros::Time::now();
 		loadSrv.request.request = 1;
 		if(loadClient.call(loadSrv)){
 			objStack = loadSrv.response.objects;
@@ -673,7 +588,7 @@ void currentPoseCallback(nav_msgs::Odometry msg){ // for re-calculation of the p
 		//pose.pose.pose.position.x = 0.25f;
 		//pose.pose.pose.position.y = 0.40f;
 }
-
+/*
 void actuateGripper(bool command){
 	gateSrv.request.control = command;
 	gateClient.call(gateSrv);
@@ -688,7 +603,7 @@ void actuateGripper(bool command){
 		ROS_INFO("Gripper don't react. Please have a look.");
 	}
 }
-
+*/
 int startInitialized = 0;
 float lastGoalX;
 float lastGoalY;
@@ -702,10 +617,12 @@ int main(int argc, char **argv){
 		//ros::Subscriber rviz_goal = n.subscribe<geometry_msgs::PoseStamped>("/rviz_object_pose",10,rvizTargetPoseCallback);
 		storeObjClient = n.serviceClient<rosie_map_controller::RequestObjStoring>("request_store_objects");
 		loadClient = n.serviceClient<rosie_map_controller::RequestLoading>("request_load_mapping");
-		gateClient = n.serviceClient<rosie_servo_controller::ControlGates>("control_gates");
+		//gateClient = n.serviceClient<rosie_servo_controller::ControlGates>("control_gates");
 		collisionClient = n.serviceClient<rosie_path_finder::RequestRerun>("request_rerun");
 		rrtClient = n.serviceClient<rosie_path_finder::rrtService>("/rrt");
 		//rosie_map_controller::StartRRT startSrv;
+		map_sub = n.subscribe<visualization_msgs::MarkerArray>("/maze_map",10,initializeMap);
+
 
     n.getParam("red_cylinder", red_cylinder_val);
     n.getParam("red_cube", red_cube_val);
@@ -740,10 +657,11 @@ int main(int argc, char **argv){
 //***********************************
 		if(mapInitialized){
 			if(!pathInitialized){
-				findTree();
-				pathInitialized;
+				ROS_ERROR("Find Tree");
+				findPath();
+				pathInitialized = 1;
 			}else{
-
+/*
 				collisionSrv.request.question = 1;
 				if(collisionClient.call(collisionSrv)){
 					if(collisionSrv.response.answer){
@@ -765,7 +683,7 @@ int main(int argc, char **argv){
 				if((pow(pose.pose.pose.position.x-cleanpath[poscnt][0],2)+pow(pose.pose.pose.position.y-cleanpath[poscnt][1],2)) < 0.2*0.2){
 					poscnt++;
 					pathSend = 0;
-				}
+				}*/
 			}
 		}
 		ros::spinOnce();

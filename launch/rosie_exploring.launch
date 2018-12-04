@@ -1,6 +1,6 @@
 <launch>
 	
 	<!-- run the path finder -->
-	<node pkg="rosie_path_finder" type="rosie_brain_exploring" name="exploring"/>
+	<node pkg="rosie_data_center" type="rosie_exploring" name="exploring"/>
 
 </launch>

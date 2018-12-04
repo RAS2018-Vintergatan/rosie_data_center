@@ -8,6 +8,7 @@
 #include <tf/transform_listener.h>
 #include <geometry_msgs/PoseStamped.h>
 #include <nav_msgs/Odometry.h>
+#include <visualization_msgs/Marker.h>
 
 #include <math.h>
 #include <stdlib.h>
@@ -71,6 +72,7 @@ boost::shared_ptr<geometry_msgs::PoseStamped> targetPose_ptr;
 boost::shared_ptr<geometry_msgs::PoseStamped> lastTargetPose_ptr;
 
 ros::Subscriber evidence_sub;
+ros::Subscriber battery_sub;
 ros::Publisher objStack_pub;
 ros::Publisher speak_pub;
 
@@ -111,6 +113,50 @@ rosie_map_controller::ObjectStoring objStack;
 //std::vector<rosie_map_controller::BatteryPosition> batStack;
 ros::Time lastObjStoring;
 std::vector<ros::Time> lastBatObservation;
+
+void batteryCallback(visualization_msgs::Marker msg){
+	if(!checkedStoredObjects){
+		return;
+	}
+	float posX = msg.pose.position.x;
+	float posY = msg.pose.position.y;
+	bool standing = msg.id; // 0 laying, 1 standing
+	float accuracy = 0.10;
+	if(!standing){
+		accuracy = 0.15;
+	}
+	bool pushed = 0;
+	for(int i = 0; i< objStack.Batteries.size(); ++i){
+	    if(pow(posX-objStack.Batteries[i].x,2)+pow(posY-objStack.Batteries[i].y,2) < (accuracy*accuracy)){
+	      ROS_INFO("Battery is already mapped. - Updated battery position");
+		objStack.Batteries[i].x = posX;
+		objStack.Batteries[i].y = posY;
+		if(ros::Time::now().toSec() - lastBatObservation[i].toSec() > 2*objStack.Batteries[i].certainty)
+			// when we detect an object again (after a given time interval) the certainty gets bigger
+			// instead of forgetting an object the path planner will not take batteries into account that we are not certain about(threshold);
+		objStack.Batteries[i].certainty++;
+		lastBatObservation[i] = ros::Time::now();
+		pushed = 1;
+		continue;
+	    	}else{
+				//nothing yet. No explicite forgetting.
+
+		}
+	}
+	if(!pushed){
+		ROS_INFO("NEW battery");
+		say_this.data = "' New Battery '";
+		speak_pub.publish(say_this);
+		rosie_map_controller::BatteryPosition battery;
+		battery.x = posX;
+		battery.y = posY;
+		battery.certainty = 0;
+		battery.standing = standing;
+		objStack.Batteries.push_back(battery);
+		lastBatObservation.push_back(ros::Time::now());
+	}	
+}
+
 void evidenceCallback(const rosie_object_detector::RAS_Evidence evidence){
 	if(!checkedStoredObjects){
 		loadSrv.request.request = 1;
@@ -191,11 +237,7 @@ void evidenceCallback(const rosie_object_detector::RAS_Evidence evidence){
 			obj_id = PURPLE_STAR;
 			obj_val = purple_star_val;
 		}
-		else if(obj_string_id.compare(evidence.an_object)){
-			obj_id = OBJECT;
-			obj_val = 0;
-			obj_size = batSize;
-		}
+
 		float posX = evidence.object_location.x;
 		float posY = evidence.object_location.y;
 
@@ -235,38 +277,6 @@ void evidenceCallback(const rosie_object_detector::RAS_Evidence evidence){
 				}
 			}
 
-		}else{
-			float posX = evidence.object_location.x;
-			float posY = evidence.object_location.y;
-			float accuracy = 0.05; //5cm radius for faulty measurement
-			bool pushed = 0;
-			for(int i = 0; i< objStack.Batteries.size(); ++i){
-			    if(pow(posX-objStack.Batteries[i].x,2)+pow(posY-objStack.Batteries[i].y,2) < (accuracy*accuracy)){
-			      ROS_INFO("Battery is already mapped. - Updated battery position");
-							objStack.Batteries[i].x = posX;
-							objStack.Batteries[i].y = posY;
-							if(ros::Time::now().toSec() - lastBatObservation[i].toSec() > 2*objStack.Batteries[i].certainty)
-								// when we detect an object again (after a given time interval) the certainty gets bigger
-								// instead of forgetting an object the path planner will not take batteries into account that we are not certain about(threshold);
-							objStack.Batteries[i].certainty++;
-							lastBatObservation[i] = ros::Time::now();
-							pushed = 1;
-							continue;
-			    }else{
-						//nothing yet. No explicite forgetting.
-
-					}
-			}
-			if(!pushed){
-				ROS_INFO("NEW battery");
-				say_this.data = "' New Battery '";
-				speak_pub.publish(say_this);
-				rosie_map_controller::BatteryPosition battery;
-				battery.x = posX;
-				battery.y = posY;
-				battery.certainty = 0;
-				objStack.Batteries.push_back(battery);
-			}
 		}
 		if(ros::Time::now().toSec()-lastObjStoring.toSec() > 1){
 			rosie_map_controller::ObjectStoring send;
@@ -342,6 +352,7 @@ int main(int argc, char **argv){
 
     ros::NodeHandle n;
 		speak_pub = n.advertise<std_msgs::String>("/espeak/string",1);
+		battery_sub = n.subscribe<visualization_msgs::Marker>("/visualization_marker_battery", 1, batteryCallback);
 	  evidence_sub = n.subscribe<rosie_object_detector::RAS_Evidence>("/evidence",10, evidenceCallback);
 		//ros::Subscriber rviz_goal = n.subscribe<geometry_msgs::PoseStamped>("/rviz_object_pose",10,rvizTargetPoseCallback);
 		ros::Subscriber rviz_goal = n.subscribe("/rviz_object_pose",10, rvizTargetPoseCallback);
