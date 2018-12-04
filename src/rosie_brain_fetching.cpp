@@ -267,6 +267,7 @@ void evidenceCallback(const rosie_object_detector::RAS_Evidence evidence){
 				object.name = obj_string_id;
 				objStack.Objects.push_back(object);
 				say_this.data = object.name;
+				//ROS_INFO(obj_string_id);
 				speak_pub.publish(say_this);
 			}else{
 				if(pow(posX-objStack.Objects[listedIndex].x,2)+pow(posY-objStack.Objects[listedIndex].y,2) > (accuracy*accuracy)){

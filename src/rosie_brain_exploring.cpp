@@ -266,6 +266,7 @@ int mini2(std::vector<int> dist){
 	return index;
 }
 
+std::vector<std::vector<float> > finalpath;
 std::vector<std::vector<float> > poses;
 std::vector<float> p(2,0);
 void findPath(){
@@ -366,10 +367,9 @@ void findPath(){
 			}
 		}
 	}
-ROS_ERROR("C2");
 	std::vector<float> finalX;
 	std::vector<float> finalY;
-	std::vector<std::vector<float> > finalpath;
+	finalpath.clear();
 	std::vector<std::vector<float> > w_temp;
 	std::vector<int> indices;
 	int tempIdx;
@@ -682,7 +682,7 @@ int main(int argc, char **argv){
 				findPath();
 				pathInitialized = 1;
 			}else{
-/*
+
 				collisionSrv.request.question = 1;
 				if(collisionClient.call(collisionSrv)){
 					if(collisionSrv.response.answer){
@@ -690,21 +690,22 @@ int main(int argc, char **argv){
 					}
 				}
 
-				if(collisionDetected || !pathSend){
-					rrtSrv.request.goalx = cleanpath_f[poscnt][0];
-					rrtSrv.request.goaly = cleanpath_f[poscnt][1];
-					rrtSrv.request.mode = 3; //go to target
+				if((collisionDetected || !pathSend) && poscnt < finalpath.size()){
+					rrtSrv.request.goalx = finalpath[poscnt][0];
+					rrtSrv.request.goaly = finalpath[poscnt][1];
+					rrtSrv.request.mode = 0; //go to target
 					if(rrtClient.call(rrtSrv)){
-						cleanpath_f[poscnt][0] = rrtSrv.response.goalx;
-						cleanpath_f[poscnt][1] = rrtSrv.response.goaly;
+						//finalpath[poscnt][0] = rrtSrv.response.goalx;
+						//finalpath[poscnt][1] = rrtSrv.response.goaly;
+						ROS_ERROR("finalpath element %f %f", finalpath[poscnt][0], finalpath[poscnt][1]);
 					}
 					pathSend = 1;
 				}
 
-				if((pow(pose.pose.pose.position.x-cleanpath[poscnt][0],2)+pow(pose.pose.pose.position.y-cleanpath[poscnt][1],2)) < 0.2*0.2){
+				if((pow(pose.pose.pose.position.x-finalpath[poscnt][0],2)+pow(pose.pose.pose.position.y-finalpath[poscnt][1],2)) < 0.2*0.2){
 					poscnt++;
 					pathSend = 0;
-				}*/
+				}
 			}
 		}
 		ros::spinOnce();
