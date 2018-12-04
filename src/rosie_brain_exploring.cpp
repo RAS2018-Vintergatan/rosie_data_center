@@ -103,14 +103,14 @@ ros::Subscriber battery_sub;
 ros::Subscriber evidence_sub;
 ros::ServiceClient storeObjClient;
 ros::ServiceClient loadClient;
-//ros::ServiceClient gateClient;
+ros::ServiceClient gateClient;
 ros::ServiceClient collisionClient;
 ros::ServiceClient rrtClient;
 
 //rosie_map_controller::StartRRT startSrv;
 rosie_map_controller::RequestObjStoring objSrv;
 rosie_map_controller::RequestLoading loadSrv;
-//rosie_servo_controller::ControlGates gateSrv;
+rosie_servo_controller::ControlGates gateSrv;
 rosie_path_finder::RequestRerun collisionSrv;
 rosie_path_finder::rrtService rrtSrv;
 // Objects and Obstacles (Walls and Batteries)
@@ -278,8 +278,8 @@ void findPath(){
 				p[1] = (y+1)*resolution;
 				poses.push_back(p);
 			}else{
-				p[0] = (x+1)*resolution;
-				p[1] = (y+1)*resolution;
+				p[0] = (x)*resolution;
+				p[1] = (y)*resolution;
 				//ROS_ERROR("%f %f", p[0], p[1]);
 			}
 		}
@@ -387,9 +387,11 @@ void findPath(){
 		ROS_ERROR("path %f %f",finalpath[i][0],finalpath[i][1]);
 		w_temp[tempIdx][0] += 1000.0;
 		w_temp[tempIdx][1] += 1000.0;
+		ROS_ERROR("i %d",i);
 
 	}
 	finalpath.push_back(home);
+	ROS_ERROR("checkpoint **************************");
 	/*int idx;
 	finalpath.clear();
 	for(int i = 0; i<indices.size(); i++){
@@ -607,7 +609,7 @@ void currentPoseCallback(nav_msgs::Odometry msg){ // for re-calculation of the p
 		//pose.pose.pose.position.x = 0.25f;
 		//pose.pose.pose.position.y = 0.40f;
 }
-/*
+
 void actuateGripper(bool command){
 	gateSrv.request.control = command;
 	gateClient.call(gateSrv);
@@ -622,7 +624,7 @@ void actuateGripper(bool command){
 		ROS_INFO("Gripper don't react. Please have a look.");
 	}
 }
-*/
+
 int startInitialized = 0;
 float lastGoalX;
 float lastGoalY;
@@ -637,7 +639,7 @@ int main(int argc, char **argv){
 		//ros::Subscriber rviz_goal = n.subscribe<geometry_msgs::PoseStamped>("/rviz_object_pose",10,rvizTargetPoseCallback);
 		storeObjClient = n.serviceClient<rosie_map_controller::RequestObjStoring>("request_store_objects");
 		loadClient = n.serviceClient<rosie_map_controller::RequestLoading>("request_load_mapping");
-		//gateClient = n.serviceClient<rosie_servo_controller::ControlGates>("control_gates");
+		gateClient = n.serviceClient<rosie_servo_controller::ControlGates>("control_gates");
 		collisionClient = n.serviceClient<rosie_path_finder::RequestRerun>("request_rerun");
 		rrtClient = n.serviceClient<rosie_path_finder::rrtService>("/rrt");
 		//rosie_map_controller::StartRRT startSrv;
@@ -681,6 +683,7 @@ int main(int argc, char **argv){
 			if(!pathInitialized){
 				ROS_ERROR("Find Tree");
 				findPath();
+				
 				pathInitialized = 1;
 			}else{
 				//ROS_ERROR("-- finalpath element %f %f", finalpath[poscnt][0], finalpath[poscnt][1]);
@@ -688,11 +691,23 @@ int main(int argc, char **argv){
 				collisionSrv.request.question = 1;
 				if(collisionClient.call(collisionSrv)){
 					if(collisionSrv.response.answer){
-						//collisionDetected = 1;
+						collisionDetected = 1;
 					}
 				}
-
+				ROS_ERROR("Checkpoint 2");
+				if((pow(pose.pose.pose.position.x-finalpath[poscnt][0],2)+pow(pose.pose.pose.position.y-finalpath[poscnt][1],2)) < 0.1*0.1 && poscnt < finalpath.size()-1){
+					poscnt++;
+					ROS_ERROR("I should not be here");
+					pathSend = 0;
+					actuateGripper(1);
+					loop_rate.sleep();
+					actuateGripper(2);
+				}
+				ROS_ERROR("Checkpoint 3");
 				if((collisionDetected || !pathSend) && poscnt < finalpath.size()){
+					//if(!pathSend){
+					//	
+					//}
 					collisionDetected = 0;
 					rrtSrv.request.goalx = finalpath[poscnt][0];
 					rrtSrv.request.goaly = finalpath[poscnt][1];
@@ -700,15 +715,18 @@ int main(int argc, char **argv){
 					if(rrtClient.call(rrtSrv)){
 						//finalpath[poscnt][0] = rrtSrv.response.goalx;
 						//finalpath[poscnt][1] = rrtSrv.response.goaly;
-						ROS_ERROR("finalpath element %f %f", finalpath[poscnt][0], finalpath[poscnt][1]);
+						ROS_ERROR("finalpath element %f %f %d %d", finalpath[poscnt][0], finalpath[poscnt][1], finalpath.size(), poscnt);
 					}
 					pathSend = 1;
 				}
 
-				if((pow(pose.pose.pose.position.x-finalpath[poscnt][0],2)+pow(pose.pose.pose.position.y-finalpath[poscnt][1],2)) < 0.2*0.2 && poscnt < finalpath.size()-1){
-					poscnt++;
+				/*if((pow(pose.pose.pose.position.x-finalpath[poscnt][0],2)+pow(pose.pose.pose.position.y-finalpath[poscnt][1],2)) < 0.1*0.1 && poscnt < finalpath.size()-1){
+					ROS_ERROR("I should not be here");
 					pathSend = 0;
-				}
+					actuateGripper(1);
+					loop_rate.sleep();
+					actuateGripper(2);
+				}*/
 			}
 		}
 		ros::spinOnce();
