@@ -3,6 +3,7 @@
 #include <std_msgs/Float32.h>
 #include <std_msgs/UInt32.h>
 #include <std_msgs/Int8.h>
+#include <std_msgs/String.h>
 #include <geometry_msgs/Twist.h>
 #include <sensor_msgs/PointCloud.h>
 #include <nav_msgs/OccupancyGrid.h>
@@ -19,6 +20,7 @@
 #include <tf/transform_listener.h>
 #include <geometry_msgs/PoseStamped.h>
 #include <nav_msgs/Odometry.h>
+#include <visualization_msgs/Marker.h>
 
 #include <math.h>
 #include <stdlib.h>
@@ -93,7 +95,33 @@ std::vector<float> home(2,0);
 
 float* pointArray;
 
+std_msgs::String say_this;
+ros::Publisher speak_pub;
+ros::Publisher objStack_pub;
 ros::Subscriber map_sub;
+ros::Subscriber battery_sub;
+ros::Subscriber evidence_sub;
+ros::ServiceClient storeObjClient;
+ros::ServiceClient loadClient;
+//ros::ServiceClient gateClient;
+ros::ServiceClient collisionClient;
+ros::ServiceClient rrtClient;
+
+//rosie_map_controller::StartRRT startSrv;
+rosie_map_controller::RequestObjStoring objSrv;
+rosie_map_controller::RequestLoading loadSrv;
+//rosie_servo_controller::ControlGates gateSrv;
+rosie_path_finder::RequestRerun collisionSrv;
+rosie_path_finder::rrtService rrtSrv;
+// Objects and Obstacles (Walls and Batteries)
+int objNumber = 14;
+float objSize = 0.05;
+std::vector<float> objPoseX;
+std::vector<float> objPoseY;
+int batNumber = 4;
+float batSize = 0.1;
+std::vector<float> batPoseX;
+std::vector<float> batPoseY;
 
 char mapInitialized = 0;
 char mapInitializing = 0;
@@ -380,44 +408,63 @@ ROS_ERROR("C2");
 }
 
 
-ros::Subscriber evidence_sub;
-ros::ServiceClient storeObjClient;
-ros::ServiceClient loadClient;
-//ros::ServiceClient gateClient;
-ros::ServiceClient collisionClient;
-ros::ServiceClient rrtClient;
-
-//rosie_map_controller::StartRRT startSrv;
-rosie_map_controller::RequestObjStoring objSrv;
-rosie_map_controller::RequestLoading loadSrv;
-//rosie_servo_controller::ControlGates gateSrv;
-rosie_path_finder::RequestRerun collisionSrv;
-rosie_path_finder::rrtService rrtSrv;
-// Objects and Obstacles (Walls and Batteries)
-int objNumber = 14;
-float objSize = 0.05;
-std::vector<float> objPoseX;
-std::vector<float> objPoseY;
-int batNumber = 4;
-float batSize = 0.1;
-std::vector<float> batPoseX;
-std::vector<float> batPoseY;
-
 // **************************
 float objTemp1[4];
 float objTemp2[4];
 bool objInitialized = 0;
 float PI = 3.1415926f;
 
-
 bool checkedStoredObjects = 0;
 rosie_map_controller::ObjectStoring objStack;
 //std::vector<rosie_map_controller::BatteryPosition> batStack;
 ros::Time lastObjStoring;
 std::vector<ros::Time> lastBatObservation;
+
+void batteryCallback(visualization_msgs::Marker msg){
+	if(!checkedStoredObjects){
+		return;
+	}
+	float posX = msg.pose.position.x;
+	float posY = msg.pose.position.y;
+	bool standing = msg.id; // 0 laying, 1 standing
+	float accuracy = 0.10;
+	if(!standing){
+		accuracy = 0.15;
+	}
+	bool pushed = 0;
+	for(int i = 0; i< objStack.Batteries.size(); ++i){
+	    if(pow(posX-objStack.Batteries[i].x,2)+pow(posY-objStack.Batteries[i].y,2) < (accuracy*accuracy)){
+	      ROS_INFO("Battery is already mapped. - Updated battery position");
+		objStack.Batteries[i].x = posX;
+		objStack.Batteries[i].y = posY;
+		if(ros::Time::now().toSec() - lastBatObservation[i].toSec() > 2*objStack.Batteries[i].certainty)
+			// when we detect an object again (after a given time interval) the certainty gets bigger
+			// instead of forgetting an object the path planner will not take batteries into account that we are not certain about(threshold);
+		objStack.Batteries[i].certainty++;
+		lastBatObservation[i] = ros::Time::now();
+		pushed = 1;
+		continue;
+	    	}else{
+				//nothing yet. No explicite forgetting.
+
+		}
+	}
+	if(!pushed){
+		ROS_INFO("NEW battery");
+		say_this.data = "' New Battery '";
+		speak_pub.publish(say_this);
+		rosie_map_controller::BatteryPosition battery;
+		battery.x = posX;
+		battery.y = posY;
+		battery.certainty = 0;
+		battery.standing = standing;
+		objStack.Batteries.push_back(battery);
+		lastBatObservation.push_back(ros::Time::now());
+	}	
+}
+
 void evidenceCallback(const rosie_object_detector::RAS_Evidence evidence){
 	if(!checkedStoredObjects){
-		lastObjStoring = ros::Time::now();
 		loadSrv.request.request = 1;
 		if(loadClient.call(loadSrv)){
 			objStack = loadSrv.response.objects;
@@ -496,11 +543,7 @@ void evidenceCallback(const rosie_object_detector::RAS_Evidence evidence){
 			obj_id = PURPLE_STAR;
 			obj_val = purple_star_val;
 		}
-		else if(obj_string_id.compare(evidence.an_object)){
-			obj_id = OBJECT;
-			obj_val = 0;
-			obj_size = batSize;
-		}
+
 		float posX = evidence.object_location.x;
 		float posY = evidence.object_location.y;
 
@@ -522,48 +565,24 @@ void evidenceCallback(const rosie_object_detector::RAS_Evidence evidence){
 				object.value = obj_val; //weighting
 				object.name = obj_string_id;
 				objStack.Objects.push_back(object);
+				say_this.data = object.name;
+				speak_pub.publish(say_this);
 			}else{
 				if(pow(posX-objStack.Objects[listedIndex].x,2)+pow(posY-objStack.Objects[listedIndex].y,2) > (accuracy*accuracy)){
 					objStack.Objects[listedIndex].x = posX;
 					objStack.Objects[listedIndex].y = posY;
 					//evtl remove obj and push again -> generate new walls/lines
 					ROS_INFO("This object has been moved.");
+
+					say_this.data = "' This object has been moved. '";
+					speak_pub.publish(say_this);
 				}else{
 					ROS_INFO("This object is already mapped.");
+					say_this.data = "' This object is already mapped. '";
+					speak_pub.publish(say_this);
 				}
 			}
 
-		}else{
-			float posX = evidence.object_location.x;
-			float posY = evidence.object_location.y;
-			float accuracy = 0.05; //5cm radius for faulty measurement
-			bool pushed = 0;
-			for(int i = 0; i< objStack.Batteries.size(); ++i){
-			    if(pow(posX-objStack.Batteries[i].x,2)+pow(posY-objStack.Batteries[i].y,2) < (accuracy*accuracy)){
-			      ROS_INFO("Battery is already mapped. - Updated battery position");
-							objStack.Batteries[i].x = posX;
-							objStack.Batteries[i].y = posY;
-							if(ros::Time::now().toSec() - lastBatObservation[i].toSec() > 2*objStack.Batteries[i].certainty)
-								// when we detect an object again (after a given time interval) the certainty gets bigger
-								// instead of forgetting an object the path planner will not take batteries into account that we are not certain about(threshold);
-							objStack.Batteries[i].certainty++;
-							lastBatObservation[i] = ros::Time::now();
-							pushed = 1;
-							continue;
-			    }else{
-						//nothing yet. No explicite forgetting.
-
-					}
-			}
-			if(!pushed){
-				ROS_INFO("NEW battery");
-
-				rosie_map_controller::BatteryPosition battery;
-				battery.x = posX;
-				battery.y = posY;
-				battery.certainty = 0;
-				objStack.Batteries.push_back(battery);
-			}
 		}
 		if(ros::Time::now().toSec()-lastObjStoring.toSec() > 1){
 			rosie_map_controller::ObjectStoring send;
@@ -578,9 +597,9 @@ void evidenceCallback(const rosie_object_detector::RAS_Evidence evidence){
 				lastObjStoring = ros::Time::now();
 			}
 		}
+		objStack_pub.publish(objStack);
 	}
 }
-
 nav_msgs::Odometry pose;
 
 void currentPoseCallback(nav_msgs::Odometry msg){ // for re-calculation of the path when needed
@@ -613,7 +632,8 @@ int main(int argc, char **argv){
 		//target_tfl_ptr.reset(new tf::TransformListener);
 
     ros::NodeHandle n;
-	  evidence_sub = n.subscribe<rosie_object_detector::RAS_Evidence>("/evidence",10, evidenceCallback);
+		speak_pub = n.advertise<std_msgs::String>("/espeak/string",1);
+	  	evidence_sub = n.subscribe<rosie_object_detector::RAS_Evidence>("/evidence",10, evidenceCallback);
 		//ros::Subscriber rviz_goal = n.subscribe<geometry_msgs::PoseStamped>("/rviz_object_pose",10,rvizTargetPoseCallback);
 		storeObjClient = n.serviceClient<rosie_map_controller::RequestObjStoring>("request_store_objects");
 		loadClient = n.serviceClient<rosie_map_controller::RequestLoading>("request_load_mapping");
@@ -622,7 +642,8 @@ int main(int argc, char **argv){
 		rrtClient = n.serviceClient<rosie_path_finder::rrtService>("/rrt");
 		//rosie_map_controller::StartRRT startSrv;
 		map_sub = n.subscribe<visualization_msgs::MarkerArray>("/maze_map",10,initializeMap);
-
+		objStack_pub = n.advertise<rosie_map_controller::ObjectStoring>("/object_stack",10);
+		battery_sub = n.subscribe<visualization_msgs::Marker>("/visualization_marker_battery", 1, batteryCallback);
 
     n.getParam("red_cylinder", red_cylinder_val);
     n.getParam("red_cube", red_cube_val);
