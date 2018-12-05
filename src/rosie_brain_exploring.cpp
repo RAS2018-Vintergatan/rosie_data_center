@@ -375,7 +375,7 @@ void findPath(){
 	int tempIdx;
 	w_temp.insert(w_temp.end(), w.begin(), w.end());
 	//ROS_ERROR("size %d",poses.size());
-	for(int i= 0; i<poses.size(); i++){
+	/*for(int i= 0; i<poses.size(); i++){
 		dist.clear();
 		for(int k = 0; k<w_temp.size(); k++){
 			dist.push_back(std::sqrt(std::pow(w_temp[k][0]-poses[i][0],2)+std::pow(w_temp[k][1]-poses[i][1],2)));
@@ -387,9 +387,16 @@ void findPath(){
 		ROS_ERROR("path %f %f",finalpath[i][0],finalpath[i][1]);
 		w_temp[tempIdx][0] += 1000.0;
 		w_temp[tempIdx][1] += 1000.0;
-		ROS_ERROR("i %d",i);
+		//ROS_ERROR("i %d",i);
 
-	}
+	}*/
+	std::vector<float> point(2);
+	point[0] = 2.0f;
+	point[1] = 0.3f;
+	finalpath.push_back(point);
+	//point[0] = 2.2f;
+	//point[1] = 2.1f;
+	//finalpath.push_back(point);
 	finalpath.push_back(home);
 	ROS_ERROR("checkpoint **************************");
 	/*int idx;
@@ -646,6 +653,7 @@ int main(int argc, char **argv){
 		map_sub = n.subscribe<visualization_msgs::MarkerArray>("/maze_map",10,initializeMap);
 		objStack_pub = n.advertise<rosie_map_controller::ObjectStoring>("/object_stack",10);
 		battery_sub = n.subscribe<visualization_msgs::Marker>("/visualization_marker_battery", 1, batteryCallback);
+		ros::Subscriber odom_sub = n.subscribe<nav_msgs::Odometry>("/odom",100,currentPoseCallback);
 
     n.getParam("red_cylinder", red_cylinder_val);
     n.getParam("red_cube", red_cube_val);
@@ -674,6 +682,7 @@ int main(int argc, char **argv){
 	bool nextStepInit = 0;
 	bool pathSend = 0;
 	int poscnt = 0;
+	float d = 0;
     while(ros::ok()){
 //***********************************
 //STATE-MACHINE
@@ -695,7 +704,8 @@ int main(int argc, char **argv){
 					}
 				}
 				ROS_ERROR("Checkpoint 2");
-				if((pow(pose.pose.pose.position.x-finalpath[poscnt][0],2)+pow(pose.pose.pose.position.y-finalpath[poscnt][1],2)) < 0.1*0.1 && poscnt < finalpath.size()-1){
+				d = pow(pose.pose.pose.position.y-finalpath[poscnt][1],2)+pow(pose.pose.pose.position.x-finalpath[poscnt][0],2);
+				if(d < 0.2*0.2 && poscnt < finalpath.size()-1){
 					poscnt++;
 					ROS_ERROR("I should not be here");
 					pathSend = 0;
@@ -703,11 +713,10 @@ int main(int argc, char **argv){
 					loop_rate.sleep();
 					actuateGripper(2);
 				}
-				ROS_ERROR("Checkpoint 3");
+				ROS_ERROR("====== cond check cnt %d size %d d %f", poscnt, finalpath.size(),d);
+				
 				if((collisionDetected || !pathSend) && poscnt < finalpath.size()){
-					//if(!pathSend){
-					//	
-					//}
+									
 					collisionDetected = 0;
 					rrtSrv.request.goalx = finalpath[poscnt][0];
 					rrtSrv.request.goaly = finalpath[poscnt][1];
@@ -718,6 +727,7 @@ int main(int argc, char **argv){
 						ROS_ERROR("finalpath element %f %f %d %d", finalpath[poscnt][0], finalpath[poscnt][1], finalpath.size(), poscnt);
 					}
 					pathSend = 1;
+					
 				}
 
 				/*if((pow(pose.pose.pose.position.x-finalpath[poscnt][0],2)+pow(pose.pose.pose.position.y-finalpath[poscnt][1],2)) < 0.1*0.1 && poscnt < finalpath.size()-1){
