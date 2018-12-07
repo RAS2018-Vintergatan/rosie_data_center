@@ -324,7 +324,11 @@ void currentPoseCallback(nav_msgs::Odometry msg){ // for re-calculation of the p
 
 void actuateGripper(bool command){
 	gateSrv.request.control = command;
-	gateClient.call(gateSrv);
+	if(!gateClient.call(gateSrv)){
+		ROS_ERROR("**********************************");
+		ROS_ERROR("Gate callback worked not");
+		ROS_ERROR("**********************************");
+	}
 	//	ROS_INFO("");
 	if(gateSrv.response.result == 1){
 		if(command == 0){
@@ -358,10 +362,11 @@ int main(int argc, char **argv){
 		ros::Subscriber rviz_goal = n.subscribe("/rviz_object_pose",10, rvizTargetPoseCallback);
 		storeObjClient = n.serviceClient<rosie_map_controller::RequestObjStoring>("request_store_objects");
 		loadClient = n.serviceClient<rosie_map_controller::RequestLoading>("request_load_mapping");
-		gateClient = n.serviceClient<rosie_servo_controller::ControlGates>("control_gates");
+		gateClient = n.serviceClient<rosie_servo_controller::ControlGates>("rosie_servo_service");
 		collisionClient = n.serviceClient<rosie_path_finder::RequestRerun>("request_rerun");
 		rrtClient = n.serviceClient<rosie_path_finder::rrtService>("/rrt");
 		objStack_pub = n.advertise<rosie_map_controller::ObjectStoring>("/object_stack",10);
+ros::Subscriber odom_sub = n.subscribe<nav_msgs::Odometry>("/odom",100,currentPoseCallback);
 		//rosie_map_controller::StartRRT startSrv;
     lastObjStoring = ros::Time::now();
     n.getParam("red_cylinder", red_cylinder_val);
@@ -418,10 +423,12 @@ int main(int argc, char **argv){
 			}
 
 		}
-
-		if(0.05*0.05 < (pow(pose.pose.pose.position.x-lastTargetPose_ptr->pose.position.x,2)+pow(pose.pose.pose.position.y-lastTargetPose_ptr->pose.position.y,2)) < 0.2*0.2){
+		ROS_ERROR("pose %f %f target %f %f",pose.pose.pose.position.x,pose.pose.pose.position.y,(lastTargetPose_ptr->pose.position.x),(lastTargetPose_ptr->pose.position.y));
+		if(0.05*0.05 < (pow(pose.pose.pose.position.x-(lastTargetPose_ptr->pose.position.x),2)+pow(pose.pose.pose.position.y-(lastTargetPose_ptr->pose.position.y),2)) < 0.2*0.2){
+			ROS_ERROR("open gripper");
 			actuateGripper(1); //open
-		}else if (0 < (pow(pose.pose.pose.position.x-lastTargetPose_ptr->pose.position.x,2)+pow(pose.pose.pose.position.y-lastTargetPose_ptr->pose.position.y,2)) < 0.05*0.05){
+		}else if (0 < (pow(pose.pose.pose.position.x-(lastTargetPose_ptr->pose.position.x),2)+pow(pose.pose.pose.position.y-(lastTargetPose_ptr->pose.position.y),2)) < 0.05*0.05){
+			ROS_ERROR("close gripper");
 			actuateGripper(0); //close
 		}
 

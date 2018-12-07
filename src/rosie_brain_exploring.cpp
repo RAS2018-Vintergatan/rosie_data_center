@@ -82,7 +82,7 @@ int purple_cross_val = 0;
 int purple_star_val = 0;
 
 float pi = 3.14159265359;
-float resolution = 0.2;
+float resolution = 0.15;
 int width = 1;
 int height = 1;
 int numbMarkers = 0;
@@ -122,7 +122,7 @@ int batNumber = 4;
 float batSize = 0.1;
 std::vector<float> batPoseX;
 std::vector<float> batPoseY;
-
+bool collisionDetected = 0;
 char mapInitialized = 0;
 char mapInitializing = 0;
 void initializeMap(visualization_msgs::MarkerArray msg){
@@ -204,10 +204,10 @@ void initializeMap(visualization_msgs::MarkerArray msg){
 		occGrid.data.push_back(0);
 	}
 	for(int k = 0; k < numbMarkers; ++k){
-		float x1 = (pointArray[k<<2]) - movex;
-		float y1 = (pointArray[(k<<2)+1]) - movey;
-		float x2 = (pointArray[(k<<2)+2]) - movex;
-		float y2 = (pointArray[(k<<2)+3]) - movey;
+		float x1 = (pointArray[k<<2]);
+		float y1 = (pointArray[(k<<2)+1]);
+		float x2 = (pointArray[(k<<2)+2]);
+		float y2 = (pointArray[(k<<2)+3]);
 
 		float diffX = (x2-x1);
 		float diffY = (y2-y1);
@@ -274,8 +274,8 @@ void findPath(){
 	for(int y = 0; y<height; y++){
 		for(int x = 0; x<width; x++){
 			if(occGrid.data[y*width+x]==0){
-				p[0] = (x+1)*resolution;
-				p[1] = (y+1)*resolution;
+				p[0] = (x+0.5)*resolution;
+				p[1] = (y+0.5)*resolution;
 				poses.push_back(p);
 			}else{
 				p[0] = (x)*resolution;
@@ -284,9 +284,6 @@ void findPath(){
 			}
 		}
 	}
-
-
-
 
 	int cellsInY = height;
 	//int cellsIntervalY = 1;
@@ -375,7 +372,7 @@ void findPath(){
 	int tempIdx;
 	w_temp.insert(w_temp.end(), w.begin(), w.end());
 	//ROS_ERROR("size %d",poses.size());
-	/*for(int i= 0; i<poses.size(); i++){
+	for(int i= 0; i<poses.size(); i++){
 		dist.clear();
 		for(int k = 0; k<w_temp.size(); k++){
 			dist.push_back(std::sqrt(std::pow(w_temp[k][0]-poses[i][0],2)+std::pow(w_temp[k][1]-poses[i][1],2)));
@@ -389,15 +386,39 @@ void findPath(){
 		w_temp[tempIdx][1] += 1000.0;
 		//ROS_ERROR("i %d",i);
 
-	}*/
+	}
+	finalpath.clear();
 	std::vector<float> point(2);
-	point[0] = 2.0f;
-	point[1] = 0.3f;
+	/*point[0] = 0.3f;
+	point[1] = 2.1f;
 	finalpath.push_back(point);
-	//point[0] = 2.2f;
-	//point[1] = 2.1f;
-	//finalpath.push_back(point);
-	finalpath.push_back(home);
+	point[0] = 0.8f;
+	point[1] = 2.17f;
+	finalpath.push_back(point);
+	point[0] = 1.29f;
+	point[1] = 1.287f;
+	finalpath.push_back(point);
+	point[0] = 0.7f;
+	point[1] = 0.877f;
+	finalpath.push_back(point);
+	point[0] = 1.39f;
+	point[1] = 0.657f;
+	finalpath.push_back(point);
+	point[0] = 2.12f;
+	point[1] = 0.447f;
+	finalpath.push_back(point);
+	point[0] = 2.215f;
+	point[1] = 2.146f;
+	finalpath.push_back(point);
+	point[0] = 0.23f;
+	point[1] = 0.4f;
+	finalpath.push_back(point);*/
+	point[0] = 1.57f;
+	point[1] = 1.51f;
+	finalpath.push_back(point);
+	point[0] = 0.23f;
+	point[1] = 0.4f;
+	finalpath.push_back(point);
 	ROS_ERROR("checkpoint **************************");
 	/*int idx;
 	finalpath.clear();
@@ -452,6 +473,7 @@ void batteryCallback(visualization_msgs::Marker msg){
 		objStack.Batteries[i].certainty++;
 		lastBatObservation[i] = ros::Time::now();
 		pushed = 1;
+		collisionDetected = 1;
 		continue;
 	    	}else{
 				//nothing yet. No explicite forgetting.
@@ -469,6 +491,7 @@ void batteryCallback(visualization_msgs::Marker msg){
 		battery.standing = standing;
 		objStack.Batteries.push_back(battery);
 		lastBatObservation.push_back(ros::Time::now());
+		collisionDetected = 1;
 	}	
 }
 
@@ -574,6 +597,7 @@ void evidenceCallback(const rosie_object_detector::RAS_Evidence evidence){
 				object.value = obj_val; //weighting
 				object.name = obj_string_id;
 				objStack.Objects.push_back(object);
+				collisionDetected = 1;
 				say_this.data = object.name;
 				speak_pub.publish(say_this);
 			}else{
@@ -646,7 +670,7 @@ int main(int argc, char **argv){
 		//ros::Subscriber rviz_goal = n.subscribe<geometry_msgs::PoseStamped>("/rviz_object_pose",10,rvizTargetPoseCallback);
 		storeObjClient = n.serviceClient<rosie_map_controller::RequestObjStoring>("request_store_objects");
 		loadClient = n.serviceClient<rosie_map_controller::RequestLoading>("request_load_mapping");
-		gateClient = n.serviceClient<rosie_servo_controller::ControlGates>("control_gates");
+		gateClient = n.serviceClient<rosie_servo_controller::ControlGates>("rosie_servo_service");
 		collisionClient = n.serviceClient<rosie_path_finder::RequestRerun>("request_rerun");
 		rrtClient = n.serviceClient<rosie_path_finder::rrtService>("/rrt");
 		//rosie_map_controller::StartRRT startSrv;
@@ -677,7 +701,7 @@ int main(int argc, char **argv){
 
     ros::Rate loop_rate(10);
 	ros::Time load_time = ros::Time::now();
-	bool collisionDetected = 0;
+	
 	bool pathInitialized= 0;
 	bool nextStepInit = 0;
 	bool pathSend = 0;
@@ -705,16 +729,24 @@ int main(int argc, char **argv){
 				}
 				ROS_ERROR("Checkpoint 2");
 				d = pow(pose.pose.pose.position.y-finalpath[poscnt][1],2)+pow(pose.pose.pose.position.x-finalpath[poscnt][0],2);
-				if(d < 0.2*0.2 && poscnt < finalpath.size()-1){
+				if(d < 0.1*0.1 && poscnt < finalpath.size()-1){
 					poscnt++;
 					ROS_ERROR("I should not be here");
 					pathSend = 0;
 					actuateGripper(1);
 					loop_rate.sleep();
-					actuateGripper(2);
+					actuateGripper(0);
 				}
 				ROS_ERROR("====== cond check cnt %d size %d d %f", poscnt, finalpath.size(),d);
-				
+				if(d < 0.2*0.2){
+					actuateGripper(1);
+				}
+				if(d < 0.05*0.05){
+					actuateGripper(0);
+				}
+				if(d > 0.2*0.2){
+					actuateGripper(0);
+				}
 				if((collisionDetected || !pathSend) && poscnt < finalpath.size()){
 									
 					collisionDetected = 0;
